@@ -3,6 +3,8 @@ import { customAlphabet } from "nanoid";
 import twemoji from "twemoji";
 import { Cell, Game, Player, Team, Unit } from "./game/Game";
 import { andFN, GameMap, manhattanDistFN, TileRef } from "./game/GameMap";
+import { PathFindResultType } from "./pathfinding/AStar";
+import { PathFinder } from "./pathfinding/PathFinding";
 import {
   AllPlayersStats,
   ClientID,
@@ -102,6 +104,50 @@ export function closestShoreFromPlayer(
     const currentDistance = gm.manhattanDist(target, current);
     return currentDistance < closestDistance ? current : closest;
   });
+}
+
+export function bestDeploymentShore(
+  mg: Game,
+  player: Player,
+  target: TileRef,
+): TileRef | null {
+  const shoreTiles = Array.from(player.borderTiles()).filter((t) =>
+    mg.isShore(t),
+  );
+  if (shoreTiles.length == 0) {
+    return null;
+  }
+
+  let closestShoreTile: TileRef | null = null;
+  let closestDistance = Infinity;
+  for (const shoreTile of shoreTiles) {
+    const pathFinder = PathFinder.Mini(mg, 2000, false, 10);
+
+    let currentTile = shoreTile;
+    let tileDistance = 0;
+
+    while (true) {
+      const result = pathFinder.nextTile(currentTile, target);
+      if (result.type == PathFindResultType.Completed) {
+        if (tileDistance < closestDistance) {
+          closestDistance = tileDistance;
+          closestShoreTile = shoreTile;
+        }
+        break;
+      } else if (result.type == PathFindResultType.NextTile) {
+        currentTile = result.tile;
+        tileDistance++;
+      } else if (result.type == PathFindResultType.Pending) {
+        break;
+      } else if (result.type == PathFindResultType.PathNotFound) {
+        break;
+      } else {
+        // @ts-expect-error result has type never
+        throw new Error(`Unexpected pathfinding result type: ${result.type}`);
+      }
+    }
+  }
+  return closestShoreTile;
 }
 
 function closestShoreTN(
